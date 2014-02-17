@@ -1,26 +1,28 @@
 require 'rubygems'
 require 'ruby-dictionary'
 
+class EnglishDictionary
+  def self.cached
+    @dictionary ||=
+      begin
+        puts "Building dictionary..."
+        Dictionary.from_file('/usr/share/dict/words')
+      end
+  end
+end
+
 class BoggleGame
-  attr_accessor :tiles, :words, :dictionary
+  attr_accessor :tiles, :words, :dictionary, :input
 
   def initialize(array_of_array)
     @tiles = []
     @words = []
     @input = array_of_array
-
-    generate_dictionary
-    populate_tiles
   end
 
   def discover!
+    populate_tiles
     Word.new(self).discover
-  end
-
-  def generate_dictionary
-    puts 'Building dictionary...'
-    @dictionary = Dictionary.from_file('/usr/share/dict/words')
-    puts 'Searching for words...'
   end
 
   def populate_tiles
@@ -29,6 +31,10 @@ class BoggleGame
         @tiles << Tile.new(self, i+1, j+1, letter)
       end
     end
+  end
+
+  def dimension
+    @input.length
   end
 
   def unique_words
@@ -48,7 +54,7 @@ class Tile
 
   def neighbors
     @neighbors ||= @game.tiles.select do |tile|
-      # (tile.x - x).abs <= 1 && (tile.y - y).abs <= 1  # horizontal, vertical and diagonal
+      #(tile.x - x).abs <= 1 && (tile.y - y).abs <= 1  # horizontal, vertical and diagonal
       ((tile.x - x).abs == 1 && tile.y == y) ||         # horizontal and vertical only
       ((tile.y - y).abs == 1 && tile.x == x)
     end - [self]
@@ -64,7 +70,7 @@ class Word
   end
 
   def to_s
-    @tiles.map(&:letter).join("")
+    @tiles.map(&:letter).join("").upcase
   end
 
   def possible_next_tiles
@@ -84,7 +90,7 @@ class Word
   end
 
   def dictionary
-    game.dictionary
+    EnglishDictionary.cached
   end
 
   def is_valid?
@@ -101,8 +107,9 @@ end
 class Word
   def pretty_print
     puts to_s.upcase
-    (1..4).each do |x|
-      (1..4).each do |y|
+    range = (1..game.dimension)
+    range.each do |x|
+      range.each do |y|
         tile = @tiles.detect{|t| t.x == x && t.y == y}
         putc tile ? tile.letter.upcase : "*"
         putc " "
@@ -113,16 +120,35 @@ class Word
   end
 end
 
-game = BoggleGame.new([%w[h e l l], %w[s e e o], %w[t m e a], %w[h i s n]])
-game.discover!
+def default_example_input
+  [%w[h e l l],
+   %w[s e e o],
+   %w[t m e a],
+   %w[h i s n]]
+end
 
-game.words.each(&:pretty_print)
+def user_input
+  puts "Enter letters for Boggle, one row at a time with spaces:(Press Enter for example)"
+  input = []
+  input << letters = gets.strip.split(" ")
+  (letters.count - 1).times { input << gets.strip.split(" ") } unless letters.empty?
 
-unique_words = game.unique_words
-puts "#{unique_words.count} words found."
-p unique_words
+  input.flatten.empty? ? default_example_input : input
+end
 
-#HELL
-#SEEO
-#TMEA
-#HISN
+def print_game(game)
+  game.words.each(&:pretty_print)
+
+  unique_words = game.unique_words
+  puts "#{unique_words.count} words found."
+  p unique_words
+  puts
+  puts "The Boggle Game"
+  Word.new(game, game.tiles).pretty_print
+end
+
+while input = user_input
+  game = BoggleGame.new(input)
+  game.discover!
+  print_game(game)
+end

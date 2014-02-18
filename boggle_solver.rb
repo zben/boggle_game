@@ -1,16 +1,6 @@
 require 'rubygems'
 require 'ruby-dictionary'
 
-class EnglishDictionary
-  def self.cached
-    @dictionary ||=
-      begin
-        puts "Building dictionary..."
-        Dictionary.from_file('/usr/share/dict/words')
-      end
-  end
-end
-
 class BoggleGame
   attr_accessor :tiles, :words, :dictionary, :input
 
@@ -20,7 +10,7 @@ class BoggleGame
     @input = array_of_array
   end
 
-  def discover!
+  def discover
     populate_tiles
     Word.new(self).discover
   end
@@ -28,7 +18,7 @@ class BoggleGame
   def populate_tiles
     @input.each_with_index do |letter_array, i|
       letter_array.each_with_index do |letter, j|
-        @tiles << Tile.new(self, i+1, j+1, letter)
+        @tiles << Tile.new(self, i + 1, j + 1, letter)
       end
     end
   end
@@ -53,11 +43,23 @@ class Tile
   end
 
   def neighbors
-    @neighbors ||= @game.tiles.select do |tile|
-      #(tile.x - x).abs <= 1 && (tile.y - y).abs <= 1  # horizontal, vertical and diagonal
-      ((tile.x - x).abs == 1 && tile.y == y) ||         # horizontal and vertical only
-      ((tile.y - y).abs == 1 && tile.x == x)
-    end - [self]
+    @neighbors ||= @game.tiles.select { |tile| neighbor?(tile) } - [self]
+  end
+
+  def neighbor?(tile)
+    horizontal_neighbor?(tile) || vertical_neighbor?(tile) || diagonal_neighbor?(tile)
+  end
+
+  def horizontal_neighbor?(tile)
+    (tile.x - x).abs == 1 && tile.y == y
+  end
+
+  def vertical_neighbor?(tile)
+    (tile.y - y).abs == 1 && tile.x == x
+  end
+
+  def diagonal_neighbor?(tile)
+    (tile.x - x).abs == 1 && (tile.y - y).abs == 1
   end
 end
 
@@ -70,17 +72,15 @@ class Word
   end
 
   def to_s
-    @tiles.map(&:letter).join("").upcase
-  end
-
-  def possible_next_tiles
-    @tiles.empty? ? game.tiles : @tiles[-1].neighbors - @tiles
+    @tiles.map(&:letter).join.upcase
   end
 
   def child_words
-    return [] if possible_next_tiles.empty?
-
     possible_next_tiles.map { |tile| self.class.new(game, self.tiles + [tile]) }
+  end
+
+  def possible_next_tiles
+    @tiles.empty? ? game.tiles : @tiles.last.neighbors - @tiles
   end
 
   def discover
@@ -98,19 +98,53 @@ class Word
   end
 
   def is_word?
-    dictionary.exists?(to_s)
+    dictionary.exists?(to_s) && to_s.length >= 3
   end
 end
 
-#Calling code
+# Additional Code
+#
+class EnglishDictionary
+  def self.cached
+    @dictionary ||=
+      begin
+        puts "Building dictionary..."
+        Dictionary.from_file('/usr/share/dict/words')
+      end
+  end
+end
 
-class Word
-  def pretty_print
-    puts to_s.upcase
-    range = (1..game.dimension)
+class BogglePrinter
+  def initialize(game)
+    @game = game
+  end
+
+  def print_game
+    puts "\nThe Boggle Game\n"
+    print_tiles(@game.tiles)
+  end
+
+  def print_words
+    puts "\nHow to find the words\n"
+    @game.words.each do |word|
+      puts word.to_s.upcase
+      print_tiles(word.tiles)
+    end
+  end
+
+  def list_words
+   puts "#{@game.unique_words.count} words found."
+   p @game.unique_words
+   puts
+  end
+
+  private
+
+  def print_tiles(tiles)
+    range = (1..@game.dimension)
     range.each do |x|
       range.each do |y|
-        tile = @tiles.detect{|t| t.x == x && t.y == y}
+        tile = tiles.detect{|t| t.x == x && t.y == y}
         putc tile ? tile.letter.upcase : "*"
         putc " "
       end
@@ -118,37 +152,4 @@ class Word
     end
     puts
   end
-end
-
-def default_example_input
-  [%w[h e l l],
-   %w[s e e o],
-   %w[t m e a],
-   %w[h i s n]]
-end
-
-def user_input
-  puts "Enter letters for Boggle, one row at a time with spaces:(Press Enter for example)"
-  input = []
-  input << letters = gets.strip.split(" ")
-  (letters.count - 1).times { input << gets.strip.split(" ") } unless letters.empty?
-
-  input.flatten.empty? ? default_example_input : input
-end
-
-def print_game(game)
-  game.words.each(&:pretty_print)
-
-  unique_words = game.unique_words
-  puts "#{unique_words.count} words found."
-  p unique_words
-  puts
-  puts "The Boggle Game"
-  Word.new(game, game.tiles).pretty_print
-end
-
-while input = user_input
-  game = BoggleGame.new(input)
-  game.discover!
-  print_game(game)
 end
